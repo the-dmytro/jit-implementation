@@ -51,13 +51,44 @@ pip install ruff
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | — | Required for generation |
-| `JIT_IMPLEMENTATION_MODEL` | `gpt-4.1` | OpenAI model id (use a current codegen-capable model) |
+| `JIT_IMPLEMENTATION_PROVIDER` | `openai` | `openai` or `cursor` (Cursor CLI) |
+| `OPENAI_API_KEY` | — | Required when provider is `openai` |
+| `JIT_IMPLEMENTATION_MODEL` | `gpt-4.1` | OpenAI model id |
 | `JIT_IMPLEMENTATION_CACHE_DIR` | `.jit_impl` | Where generated implementations are stored |
 | `JIT_IMPLEMENTATION_MAX_TRIES` | `5` | Retries when tests fail |
-| `JIT_IMPLEMENTATION_TEMPERATURE` | `0` | Sampling temperature |
+| `JIT_IMPLEMENTATION_TEMPERATURE` | `0` | OpenAI sampling temperature |
+| `CURSOR_AGENT_BIN` | `cursor-agent` | Cursor CLI binary (cursor provider) |
+| `CURSOR_API_KEY` | — | Optional; else use `cursor-agent login` |
+| `JIT_IMPLEMENTATION_WORKSPACE` | auto | Repo root for `--workspace` |
+| `JIT_IMPLEMENTATION_CURSOR_TIMEOUT` | `300` | Seconds per `cursor-agent` call |
 
-Version **0.2.0** uses the OpenAI **Responses API** (`client.responses.parse`) with strict Pydantic tool schemas. See [CHANGELOG.md](CHANGELOG.md) for migration notes from 0.1.x.
+### Cursor CLI provider (0.3+)
+
+Use Cursor Agent instead of OpenAI for codegen:
+
+```bash
+pip install "jit-implementation>=0.3.0"
+# OpenAI still required as dependency when using openai provider
+export JIT_IMPLEMENTATION_PROVIDER=cursor
+# optional: export CURSOR_API_KEY=...  or: cursor-agent login
+```
+
+```python
+from jit_implementation import implement
+
+@implement(provider="cursor")
+def fib(n: int) -> int:
+    """Return the nth Fibonacci number."""
+    ...
+
+print(fib(10))
+```
+
+- One `cursor-agent` headless call per implementation attempt (JSON output).
+- `in_place=True` is **not** supported with the cursor provider.
+- CLI contract notes: [docs/cursor_cli_contract.md](docs/cursor_cli_contract.md).
+
+OpenAI path (default) uses the **Responses API** (`client.responses.parse`). See [CHANGELOG.md](CHANGELOG.md).
 
 ### Advanced Usage
 

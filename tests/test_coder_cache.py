@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from jit_implementation.coder import Coder
 from jit_implementation.config import Settings
@@ -12,11 +12,16 @@ def test_code_path_is_stable_across_cwd(tmp_path, monkeypatch):
     declaration.write_text('def sample():\n    """Doc."""\n    ...\n')
 
     settings = Settings(
+        provider="openai",
         api_key="x",
         model="gpt-test",
         temperature=0.0,
         max_tries=5,
         cache_dir=tmp_path / "cache",
+        cursor_agent_bin="cursor-agent",
+        cursor_api_key=None,
+        workspace=None,
+        cursor_timeout_seconds=300,
     )
 
     def sample():
@@ -48,11 +53,16 @@ def test_code_path_is_stable_across_cwd(tmp_path, monkeypatch):
 def test_checksum_changes_when_declaration_changes(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     settings = Settings(
+        provider="openai",
         api_key="x",
         model="gpt-test",
         temperature=0.0,
         max_tries=5,
         cache_dir=tmp_path / "cache",
+        cursor_agent_bin="cursor-agent",
+        cursor_api_key=None,
+        workspace=None,
+        cursor_timeout_seconds=300,
     )
 
     source = tmp_path / "sample.py"
@@ -64,7 +74,12 @@ def test_checksum_changes_when_declaration_changes(tmp_path, monkeypatch):
 
         with patch(
             "jit_implementation.coder.inspect.getsource", return_value=source_text
-        ), patch("jit_implementation.coder.inspect.getfile", return_value=str(source)):
+        ), patch(
+            "jit_implementation.coder.inspect.getfile", return_value=str(source)
+        ), patch(
+            "jit_implementation.coder.create_generation_backend",
+            return_value=MagicMock(),
+        ):
             coder = Coder(sample, settings=settings)
             return coder._get_implementation_checksum()
 

@@ -53,3 +53,23 @@ def test_class_decorator_preserves_name_and_lazy_impl(monkeypatch):
 
     Widget(1)
     assert calls["run"] == 1
+
+
+def test_decorator_passes_provider(monkeypatch):
+    captured: dict = {}
+
+    class FakeCoder:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+
+        def run(self):
+            return lambda: None
+
+    monkeypatch.setattr("jit_implementation.decorator.Coder", FakeCoder)
+
+    @implement(provider="cursor")
+    def fn():
+        """stub"""
+
+    fn()
+    assert captured.get("provider") == "cursor"

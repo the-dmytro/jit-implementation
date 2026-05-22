@@ -9,19 +9,17 @@ from typing import Any, Callable, List, Tuple
 from pathlib import Path
 import datetime as dt
 
-import openai
 from jinja2 import Template
-from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from jit_implementation.backends.responses import ResponsesBackend
-from jit_implementation.config import DEFAULT_SETTINGS, Settings
-from jit_implementation.exceptions import MissingAPIKeyError
+from jit_implementation.backends.factory import create_generation_backend
+from jit_implementation.backends.generation import GenerationRequest
+from jit_implementation.config import DEFAULT_SETTINGS, Provider, Settings
+from jit_implementation.exceptions import InPlaceNotSupportedError
 from jit_implementation.ide import IDE
-from jit_implementation.models import ReadSourceCode, Reasoning, SubmitVersion
 
 REVISION_TEMPLATE = Template("""\
 # Version: {{ version }} - Generated on {{ timestamp }}
@@ -79,27 +77,26 @@ class Coder:
         in_place: bool = False,
         max_tries: int | None = None,
         settings: Settings | None = None,
+        provider: Provider | None = None,
     ):
         self.obj = obj
         self.test_functions = test_functions or []
         self.autonomous = autonomous
         self.in_place = in_place
-        self.settings = settings or DEFAULT_SETTINGS
+        self.settings = (settings or DEFAULT_SETTINGS).with_provider(provider)
         self.max_tries = max_tries if max_tries is not None else self.settings.max_tries
+
+        if self.in_place and self.settings.provider == "cursor":
+            raise InPlaceNotSupportedError(self.settings.provider)
 
         self.console = Console()
         self.ide = IDE(self.obj)
-        self._backend = ResponsesBackend(
-            self._create_client(),
-            model=self.settings.model,
-            temperature=self.settings.temperature,
+        declaration_file = Path(inspect.getfile(self.obj)).resolve()
+        self._backend = create_generation_backend(
+            self.settings,
+            ide=self.ide,
+            declaration_file=declaration_file,
         )
-
-    def _create_client(self) -> OpenAI:
-        api_key = self.settings.api_key
-        if not api_key:
-            raise MissingAPIKeyError()
-        return OpenAI(api_key=api_key)
 
     @property
     def code_path(self) -> Path:
@@ -173,20 +170,18 @@ class Coder:
         existing_hash = re.search(r"Implementation Checksum: (\w+)", content)
         return bool(existing_hash and existing_hash.group(1) == implementation_checksum)
 
-    def _build_tools(self) -> list[Any]:
-        tools = [
-            openai.pydantic_function_tool(SubmitVersion),
-            openai.pydantic_function_tool(Reasoning),
-        ]
-        if self.ide.unread_types:
-            tools.append(openai.pydantic_function_tool(ReadSourceCode))
-        return tools
-
-    def _read_source_tool_hint(self) -> str:
-        if not self.ide.unread_types:
-            return ""
-        names = ", ".join(sorted(t.__name__ for t in self.ide.unread_types))
-        return f"\nAvailable types for ReadSourceCode: {names}"
+    def _collect_related_sources(self) -> dict[str, str]:
+        sources: dict[str, str] = {}
+        pending = list(self.ide.unread_types)
+        while pending:
+            typ = pending.pop()
+            if typ.__name__ in sources:
+                continue
+            source = self.ide.read_source(typ)
+            if source:
+                sources[typ.__name__] = source
+            pending.extend(t for t in self.ide.unread_types if t.__name__ not in sources)
+        return sources
 
     def _format_test_failures(
         self, failures: list[tuple[str, str | None]]
@@ -196,7 +191,7 @@ class Coder:
             lines.append(f"- {description}")
             if detail:
                 lines.append(f"  {detail}")
-        lines.append("Revise the implementation and call SubmitVersion again.")
+        lines.append("Revise the implementation and submit an updated version.")
         return "\n".join(lines)
 
     def _run_tests(self, obj: Any) -> tuple[bool, list[tuple[str, str | None]]]:
@@ -205,7 +200,6 @@ class Coder:
             try:
                 passed, doc = case(obj)
             except Exception as exc:
-                passed = False
                 doc = getattr(case, "__name__", "test")
                 failures.append((doc, f"{type(exc).__name__}: {exc}"))
                 self.console.print(
@@ -220,6 +214,17 @@ class Coder:
             if not passed:
                 failures.append((doc, "Assertion did not hold"))
         return (len(failures) == 0, failures)
+
+    def _build_generation_request(
+        self, *, failure_feedback: str | None = None
+    ) -> GenerationRequest:
+        stub_source = self.ide.read_source(self.obj) or ""
+        return GenerationRequest(
+            instructions=self.PROMPT,
+            stub_source=stub_source,
+            related_sources=self._collect_related_sources(),
+            failure_feedback=failure_feedback,
+        )
 
     def run(self) -> Any:
         implementation_checksum = self._get_implementation_checksum()
@@ -240,16 +245,8 @@ class Coder:
             ),
         )
 
-        user_content = (
-            "Implement the following function or class in Python.\n"
-            "Please remember to separate imports and code as per instructions.\n"
-            f"Function or class to implement:\n{self.ide.read_source(self.obj)}"
-            f"{self._read_source_tool_hint()}"
-        )
-        self._backend.begin(instructions=self.PROMPT, user_content=user_content)
-
+        failure_feedback: str | None = None
         version = 0
-        chain_of_thought: list[str] = []
         tries = 0
 
         while tries < self.max_tries:
@@ -258,109 +255,76 @@ class Coder:
                     self.console.print("[yellow]Operation cancelled by user.[/yellow]")
                     return None
 
-            step = self._backend.complete_with_tools(self._build_tools())
-            type_by_name = {t.__name__: t for t in self.ide.unread_types}
+            request = self._build_generation_request(
+                failure_feedback=failure_feedback
+            )
+            result = self._backend.generate(request)
 
-            for call in step.tool_calls:
-                if call.name == "Reasoning" and isinstance(
-                    call.parsed_arguments, Reasoning
-                ):
-                    chain_of_thought.extend(call.parsed_arguments.chain_of_thought)
-                    self._print_llm_output("Chain of thought:")
-                    self.console.print(
-                        "\n".join(call.parsed_arguments.chain_of_thought)
-                    )
-                    self._backend.submit_tool_result(
-                        call.call_id,
-                        "Reasoning recorded. Continue with implementation.",
-                    )
+            if result.chain_of_thought:
+                self._print_llm_output("Chain of thought:")
+                self.console.print("\n".join(result.chain_of_thought))
 
-                elif call.name == "ReadSourceCode" and isinstance(
-                    call.parsed_arguments, ReadSourceCode
-                ):
-                    type_name = call.parsed_arguments.type
-                    self._print_llm_output(f"Reading source code of type: {type_name}")
-                    if type_name not in type_by_name:
-                        self._backend.submit_tool_result(
-                            call.call_id,
-                            f"Unknown type '{type_name}'. "
-                            f"Available: {', '.join(type_by_name) or 'none'}.",
-                        )
-                        continue
+            version += 1
+            imports = result.imports
+            code = self._format_code(result.code)
+            code = self._remove_duplicate_imports(code)
 
-                    source_code = self.ide.read_source(type_by_name[type_name])
-                    self._print_code(f"Source of {type_name}", source_code or "")
-                    self._backend.submit_tool_result(
-                        call.call_id, source_code or ""
-                    )
+            self._print_code(
+                f"Implementation Version {version}",
+                "\n".join(imports) + "\n\n" + code,
+            )
 
-                elif call.name == "SubmitVersion" and isinstance(
-                    call.parsed_arguments, SubmitVersion
-                ):
-                    version += 1
-                    implementation = call.parsed_arguments
-                    imports = implementation.imports
-                    code = self._format_code(implementation.code)
-                    code = self._remove_duplicate_imports(code)
+            full_code = "\n".join(imports) + "\n\n" + code
+            obj = self._compile_code(full_code)
 
-                    self._print_code(
-                        f"Implementation Version {version}",
-                        "\n".join(imports) + "\n\n" + code,
-                    )
+            passed, failures = self._run_tests(obj)
+            failed = not passed
 
-                    full_code = "\n".join(imports) + "\n\n" + code
-                    obj = self._compile_code(full_code)
+            code_path = (
+                self.code_path
+                if not failed
+                else self.code_path.with_suffix(f".v{version:02d}_failed.py")
+            )
 
-                    passed, failures = self._run_tests(obj)
-                    failed = not passed
+            code_path.write_text(
+                REVISION_TEMPLATE.render(
+                    version=version,
+                    timestamp=dt.datetime.now(dt.UTC).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                    tests_passed="PASSED" if not failed else "FAILED",
+                    declaration_file=inspect.getfile(self.obj),
+                    implementation_checksum=implementation_checksum,
+                    imports="\n".join(imports),
+                    chain_of_thought="# ".join(
+                        "\n".join(result.chain_of_thought).splitlines(True)
+                    ),
+                    code=code,
+                )
+            )
 
-                    code_path = (
-                        self.code_path
-                        if not failed
-                        else self.code_path.with_suffix(f".v{version:02d}_failed.py")
-                    )
+            if self.in_place and not failed:
+                file = inspect.getfile(self.obj)
+                source = Path(file).read_text()
+                source = source.replace(inspect.getsource(self.obj), code)
+                Path(file).write_text(source)
 
-                    code_path.write_text(
-                        REVISION_TEMPLATE.render(
-                            version=version,
-                            timestamp=dt.datetime.now(dt.UTC).strftime(
-                                "%Y-%m-%dT%H:%M:%SZ"
-                            ),
-                            tests_passed="PASSED" if not failed else "FAILED",
-                            declaration_file=inspect.getfile(self.obj),
-                            implementation_checksum=implementation_checksum,
-                            imports="\n".join(imports),
-                            chain_of_thought="# ".join(
-                                "\n".join(chain_of_thought).splitlines(True)
-                            ),
-                            code=code,
-                        )
-                    )
+                self.console.print(
+                    "[green]Code updated in place. Restarting script...[/green]"
+                )
+                subprocess.Popen([sys.executable, *sys.argv])
+                sys.exit()
 
-                    if self.in_place and not failed:
-                        file = inspect.getfile(self.obj)
-                        source = Path(file).read_text()
-                        source = source.replace(inspect.getsource(self.obj), code)
-                        Path(file).write_text(source)
+            if not failed:
+                return obj
 
-                        self.console.print(
-                            "[green]Code updated in place. Restarting script...[/green]"
-                        )
-                        subprocess.Popen([sys.executable, *sys.argv])
-                        sys.exit()
-
-                    if not failed:
-                        return obj
-
-                    tries += 1
-                    self._backend.submit_tool_result(
-                        call.call_id, self._format_test_failures(failures)
-                    )
-                    if tries >= self.max_tries:
-                        raise NotImplementedError(
-                            f"Maximum number of tries ({self.max_tries}) reached "
-                            "without passing tests."
-                        )
+            tries += 1
+            failure_feedback = self._format_test_failures(failures)
+            if tries >= self.max_tries:
+                raise NotImplementedError(
+                    f"Maximum number of tries ({self.max_tries}) reached "
+                    "without passing tests."
+                )
 
         raise NotImplementedError(
             f"Maximum number of tries ({self.max_tries}) reached without implementation."

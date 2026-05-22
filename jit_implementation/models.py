@@ -17,3 +17,12 @@ class ReadSourceCode(BaseModel):
         ...,
         description="Name of the project type whose source code should be read",
     )
+
+
+class GenerationOutput(BaseModel):
+    imports: list[str] = Field(..., description="Required imports")
+    code: str = Field(..., description="Implementation code without import statements")
+    chain_of_thought: list[str] = Field(
+        default_factory=list,
+        description="Brief reasoning steps",
+    )

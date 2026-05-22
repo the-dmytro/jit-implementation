@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 — 2026-05-22
+
+### Added
+
+- **Cursor CLI provider** (`JIT_IMPLEMENTATION_PROVIDER=cursor` or `@implement(provider="cursor")`).
+- `CursorCLIGenerationBackend`: one `cursor-agent -p --output-format json` call per attempt.
+- `GenerationBackend` protocol unifying OpenAI and Cursor codegen paths.
+- `OpenAIGenerationBackend` (extracted tool-loop from `Coder`).
+- Provider factory, workspace auto-detection, and Cursor-specific errors.
+- Docs: [docs/cursor_cli_contract.md](docs/cursor_cli_contract.md).
+
+### Changed
+
+- `Coder.run()` uses a single retry loop for all providers (cache → generate → test → retry).
+- Related type sources are preloaded for the Cursor provider (no `ReadSourceCode` round-trips).
+
+### Notes
+
+- `in_place=True` is rejected when `provider=cursor`.
+- Phase 2 (batch multi-stub generation in one CLI call) is not included yet; `GenerationBackend` is structured for a future `generate_batch`.
+
 ## 0.2.0 — 2026-05-22
 
 ### Breaking
