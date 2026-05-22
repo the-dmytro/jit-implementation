@@ -36,8 +36,28 @@ JIT Implementation is a groundbreaking Python library that generates your functi
 ### Installation
 
 ```bash
-pip install jit-implementation
+pip install "jit-implementation>=0.2.0" "openai>=2.37"
+export OPENAI_API_KEY=your-key-here
 ```
+
+Optional code formatting (uses Ruff if installed):
+
+```bash
+pip install ruff
+# or: pip install "jit-implementation[format]"
+```
+
+### Configuration (0.2+)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | — | Required for generation |
+| `JIT_IMPLEMENTATION_MODEL` | `gpt-4.1` | OpenAI model id (use a current codegen-capable model) |
+| `JIT_IMPLEMENTATION_CACHE_DIR` | `.jit_impl` | Where generated implementations are stored |
+| `JIT_IMPLEMENTATION_MAX_TRIES` | `5` | Retries when tests fail |
+| `JIT_IMPLEMENTATION_TEMPERATURE` | `0` | Sampling temperature |
+
+Version **0.2.0** uses the OpenAI **Responses API** (`client.responses.parse`) with strict Pydantic tool schemas. See [CHANGELOG.md](CHANGELOG.md) for migration notes from 0.1.x.
 
 ### Advanced Usage
 
@@ -83,8 +103,17 @@ def fib(n: int) -> int:
 While powerful, use JIT Implementation responsibly:
 
 -   Always review generated code before production use.
+-   Generated code is executed with `exec()` — treat stubs and docstrings as untrusted input.
 -   Be aware of potential security vulnerabilities.
 -   Don't let it hinder your learning and problem-solving skills.
+
+### Development
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"  # includes pytest; install ruff for format tests
+pytest
+```
 
 ## Disclaimer
 

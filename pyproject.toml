@@ -1,22 +1,31 @@
 [tool.poetry]
 name = "jit-implementation"
-version = "0.1.5"
+version = "0.2.0"
 description = "JIT Implementation: Code That Writes Itself"
 authors = ["Jiri Klimes <jiriklimes920@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-openai = "^1.51.0"
-pydantic = "^2.9.2"
+openai = "^2.37"
+pydantic = "^2.11"
 jinja2 = "^3.1.4"
-rich = "^13.9.1"
-ruff = "^0.6.8"
-
+rich = "^14.0"
 
 [tool.poetry.group.dev.dependencies]
 pygame = "^2.6.1"
+ruff = "^0.9"
+pytest = "^8.3"
+
+[tool.poetry.extras]
+format = ["ruff"]
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that call the live OpenAI API",
+]
