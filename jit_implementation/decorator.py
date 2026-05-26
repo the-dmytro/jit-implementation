@@ -2,6 +2,7 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, List, Tuple, TypeVar, cast, overload
 
+from jit_implementation.batch import BatchCoordinator, BatchRegistry
 from jit_implementation.coder import Coder
 from jit_implementation.config import Provider, Settings
 
@@ -34,17 +35,27 @@ def _implement_callable(
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         nonlocal implemented
         if implemented is None:
-            coder = Coder(
-                func,
-                test_functions,
-                autonomous,
-                in_place,
-                max_tries,
-                settings=settings,
-                provider=provider,
-            )
-            implemented = coder.run()
+            batch_id = BatchRegistry.get_batch_id(func)
+            if batch_id:
+                implemented = BatchCoordinator.ensure_implemented(batch_id, func)
+            else:
+                coder = Coder(
+                    func,
+                    test_functions,
+                    autonomous,
+                    in_place,
+                    max_tries,
+                    settings=settings,
+                    provider=provider,
+                )
+                implemented = coder.run()
         return implemented(*args, **kwargs)
+
+    wrapper._jit_test_functions = test_functions  # type: ignore[attr-defined]
+    wrapper._jit_autonomous = autonomous  # type: ignore[attr-defined]
+    wrapper._jit_in_place = in_place  # type: ignore[attr-defined]
+    wrapper._jit_max_tries = max_tries  # type: ignore[attr-defined]
+    wrapper._jit_provider = provider  # type: ignore[attr-defined]
 
     return cast(T, wrapper)
 
@@ -66,16 +77,22 @@ def _implement_class(
 
         def __call__(mcls, *args: Any, **kwargs: Any) -> Any:
             if mcls._implementation is None:
-                coder = Coder(
-                    mcls.__jit_stub__,
-                    test_functions,
-                    autonomous,
-                    in_place,
-                    max_tries,
-                    settings=settings,
-                    provider=provider,
-                )
-                mcls._implementation = coder.run()
+                batch_id = BatchRegistry.get_batch_id(mcls.__jit_stub__)
+                if batch_id:
+                    mcls._implementation = BatchCoordinator.ensure_implemented(
+                        batch_id, mcls.__jit_stub__
+                    )
+                else:
+                    coder = Coder(
+                        mcls.__jit_stub__,
+                        test_functions,
+                        autonomous,
+                        in_place,
+                        max_tries,
+                        settings=settings,
+                        provider=provider,
+                    )
+                    mcls._implementation = coder.run()
             return mcls._implementation(*args, **kwargs)
 
         def __instancecheck__(mcls, instance: Any) -> bool:

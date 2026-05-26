@@ -5,9 +5,11 @@ from openai import OpenAI
 from rich.console import Console
 
 from jit_implementation.backends.generation import (
+    BatchGenerationRequest,
     GenerationBackend,
     GenerationRequest,
     GenerationResult,
+
 )
 from jit_implementation.backends.responses import ResponsesBackend
 from jit_implementation.config import Settings
@@ -104,6 +106,26 @@ class OpenAIGenerationBackend(GenerationBackend):
 
             if submitted is not None:
                 return submitted
+
+    def generate_batch(
+        self, request: BatchGenerationRequest
+    ) -> dict[str, GenerationResult]:
+        results: dict[str, GenerationResult] = {}
+        for stub in request.stubs:
+            backend = OpenAIGenerationBackend(
+                self._settings,
+                ide=IDE(stub.obj),
+                console=self._console,
+            )
+            results[stub.name] = backend.generate(
+                GenerationRequest(
+                    instructions=request.instructions,
+                    stub_source=stub.stub_source,
+                    related_sources=request.related_sources,
+                    failure_feedback=stub.failure_feedback,
+                )
+            )
+        return results
 
     def _build_tools(self) -> list[Any]:
         tools = [

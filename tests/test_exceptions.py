@@ -23,5 +23,6 @@ def test_missing_api_key_raises():
                 cursor_api_key=None,
                 workspace=None,
                 cursor_timeout_seconds=300,
+                cursor_batch_timeout_seconds=600,
             ),
         )

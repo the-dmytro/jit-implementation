@@ -42,6 +42,7 @@ class Settings:
     cursor_api_key: str | None
     workspace: Path | None
     cursor_timeout_seconds: int
+    cursor_batch_timeout_seconds: int
 
     @classmethod
     def from_env(
@@ -70,6 +71,9 @@ class Settings:
             ),
             cursor_timeout_seconds=_env_int(
                 "JIT_IMPLEMENTATION_CURSOR_TIMEOUT", 300
+            ),
+            cursor_batch_timeout_seconds=_env_int(
+                "JIT_IMPLEMENTATION_CURSOR_BATCH_TIMEOUT", 600
             ),
         )
 

@@ -60,7 +60,37 @@ pip install ruff
 | `CURSOR_AGENT_BIN` | `cursor-agent` | Cursor CLI binary (cursor provider) |
 | `CURSOR_API_KEY` | — | Optional; else use `cursor-agent login` |
 | `JIT_IMPLEMENTATION_WORKSPACE` | auto | Repo root for `--workspace` |
-| `JIT_IMPLEMENTATION_CURSOR_TIMEOUT` | `300` | Seconds per `cursor-agent` call |
+| `JIT_IMPLEMENTATION_CURSOR_TIMEOUT` | `300` | Seconds per single-stub `cursor-agent` call |
+| `JIT_IMPLEMENTATION_CURSOR_BATCH_TIMEOUT` | `600` | Seconds per batch `cursor-agent` call |
+
+### Batch stub generation (0.4+, Cursor)
+
+Register related stubs with the same `batch_id`. The **first call** to any member runs codegen for all **pending** (cache-miss) stubs in that group. With `provider=cursor`, that is **one** `cursor-agent` call. With `provider=openai`, the coordinator runs **sequential** per-stub `generate()` calls.
+
+```python
+from jit_implementation import implement, implement_batch
+
+BATCH = __name__
+
+@implement_batch(BATCH, provider="cursor")
+@implement(provider="cursor")
+def fib(n: int) -> int:
+    """Return nth Fibonacci number."""
+    ...
+
+@implement_batch(BATCH, provider="cursor")
+@implement(provider="cursor")
+def factorial(n: int) -> int:
+    """Return n!."""
+    ...
+
+assert fib(10) == 55      # first call triggers batch for both stubs
+assert factorial(5) == 120  # second call reuses batch result
+```
+
+- Apply `@implement_batch` **above** `@implement` (outer decorator).
+- `in_place=True` is not supported with `provider=cursor` (unchanged).
+- Example: [examples/batch_math.py](examples/batch_math.py).
 
 ### Cursor CLI provider (0.3+)
 
@@ -143,7 +173,13 @@ While powerful, use JIT Implementation responsibly:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"  # includes pytest; install ruff for format tests
-pytest
+pytest -q
+```
+
+Integration tests (live `cursor-agent`; not run in default CI):
+
+```bash
+pytest -m integration
 ```
 
 ## Disclaimer

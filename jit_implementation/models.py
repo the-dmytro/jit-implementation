@@ -26,3 +26,10 @@ class GenerationOutput(BaseModel):
         default_factory=list,
         description="Brief reasoning steps",
     )
+
+
+class BatchGenerationOutput(BaseModel):
+    implementations: dict[str, GenerationOutput] = Field(
+        ...,
+        description="Map of stub name to implementation payload",
+    )

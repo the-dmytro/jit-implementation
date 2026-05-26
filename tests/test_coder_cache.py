@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from jit_implementation.coder import Coder
 from jit_implementation.config import Settings
+from jit_implementation import runtime_helpers as rh
 
 
 def test_code_path_is_stable_across_cwd(tmp_path, monkeypatch):
@@ -22,6 +23,7 @@ def test_code_path_is_stable_across_cwd(tmp_path, monkeypatch):
         cursor_api_key=None,
         workspace=None,
         cursor_timeout_seconds=300,
+        cursor_batch_timeout_seconds=600,
     )
 
     def sample():
@@ -63,6 +65,7 @@ def test_checksum_changes_when_declaration_changes(tmp_path, monkeypatch):
         cursor_api_key=None,
         workspace=None,
         cursor_timeout_seconds=300,
+        cursor_batch_timeout_seconds=600,
     )
 
     source = tmp_path / "sample.py"
@@ -81,7 +84,7 @@ def test_checksum_changes_when_declaration_changes(tmp_path, monkeypatch):
             return_value=MagicMock(),
         ):
             coder = Coder(sample, settings=settings)
-            return coder._get_implementation_checksum()
+            return rh.get_implementation_checksum(coder.obj, coder.test_functions)
 
     checksum_a = make_checksum('def sample():\n    """One."""\n    ...\n')
     checksum_b = make_checksum('def sample():\n    """Two."""\n    ...\n')

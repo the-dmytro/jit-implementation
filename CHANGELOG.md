@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 — 2026-05-22
+
+### Added
+
+- **`@implement_batch(batch_id, ...)`** — lazy batch registration; first call to any member implements all pending stubs in the group.
+- **`BatchCoordinator`** / `BatchRegistry` — thread-safe batch resolution, per-stub cache and tests.
+- **`CursorCLIGenerationBackend.generate_batch()`** — one `cursor-agent` call with `implementations` JSON map ([docs/cursor_cli_contract.md](docs/cursor_cli_contract.md)).
+- **`OpenAIGenerationBackend.generate_batch()`** — sequential `generate()` per stub (same coordinator API).
+- **`jit_implementation.runtime_helpers`** — shared cache, format, compile, and test helpers for `Coder` and batch paths.
+- **`JIT_IMPLEMENTATION_CURSOR_BATCH_TIMEOUT`** (default 600s).
+- Gated integration tests: `tests/test_integration_cursor.py` (`pytest -m integration`).
+- Example: [examples/batch_math.py](examples/batch_math.py).
+
+### Changed
+
+- `Coder` delegates cache/compile/test steps to `runtime_helpers`.
+- Export `implement_batch` from `jit_implementation`.
+
 ## 0.3.0 — 2026-05-22
 
 ### Added
@@ -19,7 +37,7 @@
 ### Notes
 
 - `in_place=True` is rejected when `provider=cursor`.
-- Phase 2 (batch multi-stub generation in one CLI call) is not included yet; `GenerationBackend` is structured for a future `generate_batch`.
+- Batch multi-stub generation ships in **0.4.0** (see above).
 
 ## 0.2.0 — 2026-05-22
 

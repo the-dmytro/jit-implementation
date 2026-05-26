@@ -1,5 +1,6 @@
 from jit_implementation.config import DEFAULT_SETTINGS, Provider, Settings
 from jit_implementation.decorator import implement
+from jit_implementation.decorators_batch import implement_batch
 from jit_implementation.coder import Coder
 from jit_implementation.exceptions import (
     CursorAgentError,
@@ -20,4 +21,5 @@ __all__ = [
     "Provider",
     "Settings",
     "implement",
+    "implement_batch",
 ]

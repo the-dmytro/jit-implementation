@@ -19,6 +19,7 @@ def test_factory_openai_default():
         cursor_api_key=None,
         workspace=None,
         cursor_timeout_seconds=300,
+        cursor_batch_timeout_seconds=600,
     )
     backend = create_generation_backend(settings, ide=MagicMock())
     assert isinstance(backend, OpenAIGenerationBackend)
@@ -36,6 +37,7 @@ def test_factory_cursor(tmp_path):
         cursor_api_key=None,
         workspace=tmp_path,
         cursor_timeout_seconds=300,
+        cursor_batch_timeout_seconds=600,
     )
     decl = tmp_path / "mod.py"
     decl.write_text("def f(): ...\n")

@@ -22,6 +22,7 @@ def _settings(**overrides) -> Settings:
         cursor_api_key=None,
         workspace=Path("/tmp/ws"),
         cursor_timeout_seconds=30,
+        cursor_batch_timeout_seconds=600,
     )
     base.update(overrides)
     return Settings(**base)

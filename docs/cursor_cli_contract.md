@@ -37,3 +37,27 @@ Stdout may be raw JSON or a wrapper object; implementation tries:
 | `CURSOR_AGENT_BIN` | `cursor-agent` |
 | `JIT_IMPLEMENTATION_WORKSPACE` | auto-detect from declaration file |
 | `JIT_IMPLEMENTATION_CURSOR_TIMEOUT` | `300` (seconds) |
+| `JIT_IMPLEMENTATION_CURSOR_BATCH_TIMEOUT` | `600` (seconds) |
+
+## Invocation (phase 2 — batch)
+
+Same flags as phase 1; one call implements multiple stubs:
+
+```json
+{
+  "implementations": {
+    "fib": {
+      "imports": ["..."],
+      "code": "...",
+      "chain_of_thought": ["..."]
+    },
+    "factorial": {
+      "imports": [],
+      "code": "...",
+      "chain_of_thought": []
+    }
+  }
+}
+```
+
+JSON keys must match Python function/class names exactly.

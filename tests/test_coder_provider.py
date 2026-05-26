@@ -20,6 +20,7 @@ def test_in_place_cursor_raises():
         cursor_api_key=None,
         workspace=None,
         cursor_timeout_seconds=30,
+        cursor_batch_timeout_seconds=600,
     )
     with pytest.raises(InPlaceNotSupportedError):
         Coder(sample, in_place=True, settings=settings)

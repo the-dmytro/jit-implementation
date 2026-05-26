@@ -1,15 +1,11 @@
+import datetime as dt
 import inspect
-import os
 import re
 import subprocess
 import sys
-import tempfile
-import hashlib
-from typing import Any, Callable, List, Tuple
 from pathlib import Path
-import datetime as dt
+from typing import Any, Callable, List, Tuple
 
-from jinja2 import Template
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -20,28 +16,7 @@ from jit_implementation.backends.generation import GenerationRequest
 from jit_implementation.config import DEFAULT_SETTINGS, Provider, Settings
 from jit_implementation.exceptions import InPlaceNotSupportedError
 from jit_implementation.ide import IDE
-
-REVISION_TEMPLATE = Template("""\
-# Version: {{ version }} - Generated on {{ timestamp }}
-
-# Tests Passed: {{ tests_passed }}
-
-# Declaration File: {{ declaration_file }}
-# Implementation Checksum: {{ implementation_checksum }}
-
-{% if chain_of_thought %}
-# Chain of Thought:
-# {{ chain_of_thought }}
-{% endif %}
-
-{% if imports %}
-# Imports
-{{ imports }}
-{% endif %}
-
-# Implementation
-{{ code }}
-""")
+from jit_implementation import runtime_helpers as rh
 
 
 class Coder:
@@ -100,41 +75,11 @@ class Coder:
 
     @property
     def code_path(self) -> Path:
-        declaration_file = Path(inspect.getfile(self.obj)).resolve()
-        cache_key = hashlib.sha256(str(declaration_file).encode()).hexdigest()[:16]
-        directory = self.settings.cache_dir.resolve() / cache_key
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory / f"{self.obj.__name__}.py"
-
-    def _format_code(self, code: str) -> str:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as temp_file:
-            temp_file.write(code)
-            temp_file_path = temp_file.name
-
-        try:
-            self.console.print("Running Ruff to format code...")
-            subprocess.run(
-                ["ruff", "format", temp_file_path],
-                check=True,
-                capture_output=True,
-            )
-            with open(temp_file_path, "r") as fixed_file:
-                return fixed_file.read()
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode() if e.stderr else str(e)
-            self.console.print(
-                f"[bold red]Ruff encountered an error:[/bold red] {stderr}"
-            )
-            return code
-        except FileNotFoundError:
-            self.console.print(
-                "[yellow]Ruff is not installed; skipping format step.[/yellow]"
-            )
-            return code
-        finally:
-            os.unlink(temp_file_path)
+        return rh.code_path_for(
+            self.obj,
+            cache_dir=self.settings.cache_dir,
+            test_functions=self.test_functions,
+        )
 
     def _print_code(self, title: str, code: str) -> None:
         self.console.print(
@@ -146,29 +91,6 @@ class Coder:
 
     def _print_llm_output(self, message: str) -> None:
         self.console.print(Text(message, style="bold cyan"))
-
-    def _compile_code(self, code: str) -> Any:
-        compiled_code = compile(code, "<string>", "exec")
-        namespace: dict[str, Any] = {}
-        exec(compiled_code, namespace)
-        return namespace[self.obj.__name__]
-
-    def _remove_duplicate_imports(self, code: str) -> str:
-        pattern = r"^\s*(import .*|from .* import .*)$"
-        return re.sub(pattern, "", code, flags=re.MULTILINE).strip()
-
-    def _get_implementation_checksum(self) -> str:
-        declaration_source = inspect.getsource(self.obj)
-        tests_str = "\n".join(inspect.getsource(func) for func in self.test_functions)
-        return hashlib.sha256(f"{declaration_source}{tests_str}".encode()).hexdigest()
-
-    def _should_reuse_code(self, implementation_checksum: str) -> bool:
-        if not self.code_path.exists():
-            return False
-
-        content = self.code_path.read_text()
-        existing_hash = re.search(r"Implementation Checksum: (\w+)", content)
-        return bool(existing_hash and existing_hash.group(1) == implementation_checksum)
 
     def _collect_related_sources(self) -> dict[str, str]:
         sources: dict[str, str] = {}
@@ -183,54 +105,23 @@ class Coder:
             pending.extend(t for t in self.ide.unread_types if t.__name__ not in sources)
         return sources
 
-    def _format_test_failures(
-        self, failures: list[tuple[str, str | None]]
-    ) -> str:
-        lines = ["One or more tests failed. Details:"]
-        for description, detail in failures:
-            lines.append(f"- {description}")
-            if detail:
-                lines.append(f"  {detail}")
-        lines.append("Revise the implementation and submit an updated version.")
-        return "\n".join(lines)
-
-    def _run_tests(self, obj: Any) -> tuple[bool, list[tuple[str, str | None]]]:
-        failures: list[tuple[str, str | None]] = []
-        for case in self.test_functions:
-            try:
-                passed, doc = case(obj)
-            except Exception as exc:
-                doc = getattr(case, "__name__", "test")
-                failures.append((doc, f"{type(exc).__name__}: {exc}"))
-                self.console.print(
-                    f"Test case `{doc}`: [red]FAILED[/red] ({type(exc).__name__}: {exc})"
-                )
-                continue
-
-            self.console.print(
-                f"Test case `{doc}`: "
-                f"{'[green]PASSED[/green]' if passed else '[red]FAILED[/red]'}"
-            )
-            if not passed:
-                failures.append((doc, "Assertion did not hold"))
-        return (len(failures) == 0, failures)
-
     def _build_generation_request(
         self, *, failure_feedback: str | None = None
     ) -> GenerationRequest:
-        stub_source = self.ide.read_source(self.obj) or ""
         return GenerationRequest(
             instructions=self.PROMPT,
-            stub_source=stub_source,
+            stub_source=self.ide.read_source(self.obj) or "",
             related_sources=self._collect_related_sources(),
             failure_feedback=failure_feedback,
         )
 
     def run(self) -> Any:
-        implementation_checksum = self._get_implementation_checksum()
+        implementation_checksum = rh.get_implementation_checksum(
+            self.obj, self.test_functions
+        )
 
-        if self._should_reuse_code(implementation_checksum):
-            return self._compile_code(self.code_path.read_text())
+        if rh.should_reuse_code(self.code_path, implementation_checksum):
+            return rh.compile_implementation(self.obj, self.code_path.read_text())
 
         self._print_code(
             "Callable to implement",
@@ -255,10 +146,9 @@ class Coder:
                     self.console.print("[yellow]Operation cancelled by user.[/yellow]")
                     return None
 
-            request = self._build_generation_request(
-                failure_feedback=failure_feedback
+            result = self._backend.generate(
+                self._build_generation_request(failure_feedback=failure_feedback)
             )
-            result = self._backend.generate(request)
 
             if result.chain_of_thought:
                 self._print_llm_output("Chain of thought:")
@@ -266,8 +156,8 @@ class Coder:
 
             version += 1
             imports = result.imports
-            code = self._format_code(result.code)
-            code = self._remove_duplicate_imports(code)
+            code = rh.format_code(result.code, self.console)
+            code = rh.remove_duplicate_imports(code)
 
             self._print_code(
                 f"Implementation Version {version}",
@@ -275,9 +165,9 @@ class Coder:
             )
 
             full_code = "\n".join(imports) + "\n\n" + code
-            obj = self._compile_code(full_code)
+            obj = rh.compile_implementation(self.obj, full_code)
 
-            passed, failures = self._run_tests(obj)
+            passed, failures = rh.run_tests(obj, self.test_functions, self.console)
             failed = not passed
 
             code_path = (
@@ -287,7 +177,7 @@ class Coder:
             )
 
             code_path.write_text(
-                REVISION_TEMPLATE.render(
+                rh.REVISION_TEMPLATE.render(
                     version=version,
                     timestamp=dt.datetime.now(dt.UTC).strftime(
                         "%Y-%m-%dT%H:%M:%SZ"
@@ -319,7 +209,7 @@ class Coder:
                 return obj
 
             tries += 1
-            failure_feedback = self._format_test_failures(failures)
+            failure_feedback = rh.format_test_failures(failures)
             if tries >= self.max_tries:
                 raise NotImplementedError(
                     f"Maximum number of tries ({self.max_tries}) reached "
