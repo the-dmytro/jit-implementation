@@ -1,17 +1,18 @@
-import enum
+import datetime as dt
+import hashlib
 import inspect
 import os
 import re
 import subprocess
 import sys
 import tempfile
-import hashlib
-from typing import Any, Callable, ClassVar, List, Tuple
+from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
-import datetime as dt
+from typing import Any, ClassVar
 
-from jinja2 import Template
 import openai
+from jinja2 import Template
 from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.panel import Panel
@@ -43,21 +44,13 @@ REVISION_TEMPLATE = Template("""\
 """)
 
 
-class StrEnum(str, enum.Enum):
-    def _generate_next_value_(name, *_):
-        return name
-
-    def __str__(self):
-        return str.__str__(self)
-
-
 class SubmitVersion(BaseModel):
-    imports: List[str] = Field(..., description="Required imports")
+    imports: list[str] = Field(..., description="Required imports")
     code: str = Field(..., description="Code of the object (without import statements)")
 
 
 class Reasoning(BaseModel):
-    chain_of_thought: List[str] = Field(..., description="Chain of thought")
+    chain_of_thought: list[str] = Field(..., description="Chain of thought")
 
 
 class Coder:
@@ -85,23 +78,27 @@ class Coder:
         "Remember: Write code that is not only functional but also maintainable and scalable."
     )
     IMPLEMENTATION_PATH: ClassVar[Path] = Path(".jit_impl")
-    API_KEY: ClassVar[str] = None
-    MODEL: ClassVar[str] = "gpt-4o-2024-08-06"
+    API_KEY: ClassVar[str | None] = None
+    MODEL: ClassVar[str] = "gpt-6-sol"
+    MODEL_ENV_VAR: ClassVar[str] = "JIT_IMPLEMENTATION_MODEL"
+    REASONING_EFFORT: ClassVar[str | None] = "none"
     TEMPERATURE: ClassVar[float] = 0.0
 
     def __init__(
         self,
         obj: Any,
-        test_functions: List[Callable[[Any], Tuple[bool, str]]] = None,
+        test_functions: list[Callable[[Any], tuple[bool, str]]] | None = None,
         autonomous: bool = True,
         in_place: bool = False,
         max_tries: int = 5,
+        model: str | None = None,
     ):
         self.obj = obj
         self.test_functions = test_functions or []
         self.autonomous = autonomous
         self.in_place = in_place
         self.max_tries = max_tries
+        self.model = model or os.getenv(self.MODEL_ENV_VAR, self.MODEL)
 
         self.console = Console()
         self.ide = IDE(self.obj)
@@ -110,10 +107,10 @@ class Coder:
     def oai(self):
         api_key = self.API_KEY or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            self.console.print(
-                "[bold red]OPENAI_API_KEY environment variable not set. Exiting...[/bold red]"
+            raise RuntimeError(
+                "OPENAI_API_KEY environment variable not set. "
+                "Set it or assign Coder.API_KEY."
             )
-            quit()
         return openai.Client(api_key=api_key)
 
     @property
@@ -136,7 +133,7 @@ class Coder:
             subprocess.run(
                 ["ruff", "format", temp_file_path], check=True, capture_output=True
             )
-            with open(temp_file_path, "r") as fixed_file:
+            with open(temp_file_path) as fixed_file:
                 fixed_code = fixed_file.read()
             return fixed_code
         except subprocess.CalledProcessError as e:
@@ -181,7 +178,7 @@ class Coder:
         if not self.code_path.exists():
             return False
 
-        with open(self.code_path, "r") as f:
+        with open(self.code_path) as f:
             content = f.read()
 
         existing_hash = re.search(r"Implementation Checksum: (\w+)", content)
@@ -242,12 +239,17 @@ class Coder:
 
                 current_tools.append(openai.pydantic_function_tool(ReadSourceCode))
 
+            request_kwargs: dict[str, Any] = {}
+            if self.REASONING_EFFORT is not None:
+                request_kwargs["reasoning_effort"] = self.REASONING_EFFORT
+
             response = self.oai.beta.chat.completions.parse(
                 messages=messages,
-                model=self.MODEL,
+                model=self.model,
                 tool_choice="required",
                 tools=current_tools,
                 temperature=self.TEMPERATURE,
+                **request_kwargs,
             )
 
             message = response.choices[0].message
@@ -266,8 +268,8 @@ class Coder:
                         {
                             "role": "tool",
                             "tool_call_id": call.id,
-                            "content": "valid",
-                        }  # WTF do I return?
+                            "content": "reasoning acknowledged",
+                        }
                     )
 
                 elif self.ide.unread_types and isinstance(

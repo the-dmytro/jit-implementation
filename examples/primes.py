@@ -1,4 +1,3 @@
-from typing import List
 from jit_implementation.decorator import implement
 
 
@@ -7,7 +6,7 @@ from jit_implementation.decorator import implement
         lambda f: (f(100) == [2, 2, 5, 5], "Prime factors of 100"),
     ]
 )
-def prime_factors(n: int) -> List[int]:
+def prime_factors(n: int) -> list[int]:
     """Return the prime factors of n"""
 
 

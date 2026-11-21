@@ -1,12 +1,13 @@
 import inspect
+from collections.abc import Callable
 from textwrap import dedent
-from typing import Any, Callable, Set, Dict, get_type_hints
+from typing import Any, get_type_hints
 
 
 class IDE:
     def __init__(self, obj: Any):
-        self.source_code_dict: Dict[type, str] = {}
-        self.unread_types: Set[type] = set()
+        self.source_code_dict: dict[type, str] = {}
+        self.unread_types: set[type] = set()
         self.collect_types_from_object(obj)
 
     def collect_types_from_object(self, obj: Any):
@@ -27,7 +28,7 @@ class IDE:
                     if typ not in self.source_code_dict:
                         self.unread_types.add(typ)
 
-    def get_all_types_from_annotation(self, annotation: Any) -> Set[type]:
+    def get_all_types_from_annotation(self, annotation: Any) -> set[type]:
         types = set()
         if isinstance(annotation, type):
             types.add(annotation)

@@ -1,9 +1,8 @@
-from typing import List
 from jit_implementation.decorator import implement
 
 
 @implement
-def sliding_window(sequence: List[int], window_size: int) -> List[List[int]]:
+def sliding_window(sequence: list[int], window_size: int) -> list[list[int]]:
     """Create a sliding window of the given size over the sequence."""
 
 

@@ -1,33 +1,35 @@
-from typing import Any, Callable, List, Tuple, TypeVar, cast, overload
+from collections.abc import Callable
 from functools import wraps
-from jit_implementation.coder import Coder
+from typing import Any, cast, overload
 
-T = TypeVar("T", bound=Callable)
+from jit_implementation.coder import Coder
 
 
 @overload
-def implement(
+def implement[T: Callable](
     obj: T,
 ) -> T: ...
 
 
 @overload
-def implement(
+def implement[T: Callable](
     *,
-    test_functions: List[Callable[[Any], Tuple[bool, str]]] = None,
+    test_functions: list[Callable[[Any], tuple[bool, str]]] | None = None,
     autonomous: bool = True,
     in_place: bool = False,
     max_tries: int = 5,
+    model: str | None = None,
 ) -> Callable[[T], T]: ...
 
 
-def implement(
+def implement[T: Callable](
     obj: T | None = None,
     *,
-    test_functions: List[Callable[[Any], Tuple[bool, str]]] = None,
+    test_functions: list[Callable[[Any], tuple[bool, str]]] | None = None,
     autonomous: bool = True,
     in_place: bool = False,
     max_tries: int = 5,
+    model: str | None = None,
 ) -> T | Callable[[T], T]:
     """Implements the decorated function or class just-in-time using AI-powered code generation.
 
@@ -36,7 +38,7 @@ def implement(
     or create placeholder implementations that pass specified tests.
 
     Args:
-        test_functions (List[Callable[[Any], Tuple[bool, str]]], optional): A list of test functions
+        test_functions (list[Callable[[Any], tuple[bool, str]]], optional): A list of test functions
             to validate the implementation. Each function should take the implemented object as an
             argument and return a tuple of (bool, str), where the bool indicates if the test passed
             and the str is a description of the test. Defaults to None.
@@ -48,6 +50,9 @@ def implement(
             separately. Defaults to False.
         max_tries (int, optional): The maximum number of attempts to generate a valid implementation
             that passes all tests. Defaults to 5.
+        model (str, optional): The OpenAI model used for code generation. Overrides the
+            JIT_IMPLEMENTATION_MODEL environment variable and the Coder.MODEL default.
+            Defaults to None.
 
     Returns:
         Callable: The decorated function or class with the implemented functionality.
@@ -62,7 +67,7 @@ def implement(
     def decorator(func: T) -> T:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            coder = Coder(func, test_functions, autonomous, in_place, max_tries)
+            coder = Coder(func, test_functions, autonomous, in_place, max_tries, model)
             implemented_func = coder.run()
             return implemented_func(*args, **kwargs)
 
