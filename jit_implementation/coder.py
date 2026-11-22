@@ -82,6 +82,7 @@ class Coder:
     MODEL: ClassVar[str] = "gpt-6-sol"
     MODEL_ENV_VAR: ClassVar[str] = "JIT_IMPLEMENTATION_MODEL"
     REASONING_EFFORT: ClassVar[str | None] = "none"
+    REASONING_EFFORT_ENV_VAR: ClassVar[str] = "JIT_IMPLEMENTATION_REASONING_EFFORT"
     TEMPERATURE: ClassVar[float] = 0.0
 
     def __init__(
@@ -92,6 +93,7 @@ class Coder:
         in_place: bool = False,
         max_tries: int = 5,
         model: str | None = None,
+        reasoning_effort: str | None = None,
     ):
         self.obj = obj
         self.test_functions = test_functions or []
@@ -99,6 +101,11 @@ class Coder:
         self.in_place = in_place
         self.max_tries = max_tries
         self.model = model or os.getenv(self.MODEL_ENV_VAR, self.MODEL)
+        if reasoning_effort is None:
+            reasoning_effort = os.getenv(
+                self.REASONING_EFFORT_ENV_VAR, self.REASONING_EFFORT
+            )
+        self.reasoning_effort = reasoning_effort or None
 
         self.console = Console()
         self.ide = IDE(self.obj)
@@ -244,8 +251,8 @@ class Coder:
                 current_tools.append(openai.pydantic_function_tool(ReadSourceCode))
 
             request_kwargs: dict[str, Any] = {}
-            if self.REASONING_EFFORT is not None:
-                request_kwargs["reasoning_effort"] = self.REASONING_EFFORT
+            if self.reasoning_effort is not None:
+                request_kwargs["reasoning_effort"] = self.reasoning_effort
 
             response = self.oai.beta.chat.completions.parse(
                 messages=messages,

@@ -32,6 +32,26 @@ def test_model_param_overrides_env_var(monkeypatch):
     assert make_coder(model="param-model").model == "param-model"
 
 
+def test_reasoning_effort_defaults_to_class_constant(monkeypatch):
+    monkeypatch.delenv(Coder.REASONING_EFFORT_ENV_VAR, raising=False)
+    assert make_coder().reasoning_effort == Coder.REASONING_EFFORT
+
+
+def test_reasoning_effort_from_env_var(monkeypatch):
+    monkeypatch.setenv(Coder.REASONING_EFFORT_ENV_VAR, "minimal")
+    assert make_coder().reasoning_effort == "minimal"
+
+
+def test_reasoning_effort_param_overrides_env_var(monkeypatch):
+    monkeypatch.setenv(Coder.REASONING_EFFORT_ENV_VAR, "minimal")
+    assert make_coder(reasoning_effort="low").reasoning_effort == "low"
+
+
+def test_reasoning_effort_empty_string_omits_parameter(monkeypatch):
+    monkeypatch.delenv(Coder.REASONING_EFFORT_ENV_VAR, raising=False)
+    assert make_coder(reasoning_effort="").reasoning_effort is None
+
+
 def test_missing_api_key_raises(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(Coder, "API_KEY", None)

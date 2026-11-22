@@ -6,7 +6,14 @@ class FakeCoder:
     captured: dict = {}
 
     def __init__(
-        self, obj, test_functions, autonomous, in_place, max_tries, model=None
+        self,
+        obj,
+        test_functions,
+        autonomous,
+        in_place,
+        max_tries,
+        model=None,
+        reasoning_effort=None,
     ):
         FakeCoder.captured = {
             "obj": obj,
@@ -15,6 +22,7 @@ class FakeCoder:
             "in_place": in_place,
             "max_tries": max_tries,
             "model": model,
+            "reasoning_effort": reasoning_effort,
         }
 
     def run(self):
@@ -32,13 +40,20 @@ def test_implement_plain_decorator(monkeypatch):
     assert FakeCoder.captured["autonomous"] is True
     assert FakeCoder.captured["max_tries"] == 5
     assert FakeCoder.captured["model"] is None
+    assert FakeCoder.captured["reasoning_effort"] is None
 
 
 def test_implement_with_options(monkeypatch):
     monkeypatch.setattr(decorator_module, "Coder", FakeCoder)
     tests = [lambda f: (True, "ok")]
 
-    @implement(test_functions=tests, autonomous=False, max_tries=2, model="my-model")
+    @implement(
+        test_functions=tests,
+        autonomous=False,
+        max_tries=2,
+        model="my-model",
+        reasoning_effort="minimal",
+    )
     def add(a, b=0): ...
 
     assert add(1, 2) == 3
@@ -46,3 +61,4 @@ def test_implement_with_options(monkeypatch):
     assert FakeCoder.captured["autonomous"] is False
     assert FakeCoder.captured["max_tries"] == 2
     assert FakeCoder.captured["model"] == "my-model"
+    assert FakeCoder.captured["reasoning_effort"] == "minimal"

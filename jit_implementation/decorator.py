@@ -19,6 +19,7 @@ def implement[T: Callable](
     in_place: bool = False,
     max_tries: int = 5,
     model: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> Callable[[T], T]: ...
 
 
@@ -30,6 +31,7 @@ def implement[T: Callable](
     in_place: bool = False,
     max_tries: int = 5,
     model: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> T | Callable[[T], T]:
     """Implements the decorated function or class just-in-time using AI-powered code generation.
 
@@ -53,6 +55,11 @@ def implement[T: Callable](
         model (str, optional): The OpenAI model used for code generation. Overrides the
             JIT_IMPLEMENTATION_MODEL environment variable and the Coder.MODEL default.
             Defaults to None.
+        reasoning_effort (str, optional): The reasoning effort sent with each request.
+            Overrides the JIT_IMPLEMENTATION_REASONING_EFFORT environment variable and the
+            Coder.REASONING_EFFORT default ("none", compatible with the default model).
+            Choose an effort supported by your model (e.g. "minimal" for gpt-5) or pass an
+            empty string to omit the parameter. Defaults to None.
 
     Returns:
         Callable: The decorated function or class with the implemented functionality.
@@ -67,7 +74,15 @@ def implement[T: Callable](
     def decorator(func: T) -> T:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            coder = Coder(func, test_functions, autonomous, in_place, max_tries, model)
+            coder = Coder(
+                func,
+                test_functions,
+                autonomous,
+                in_place,
+                max_tries,
+                model,
+                reasoning_effort,
+            )
             implemented_func = coder.run()
             return implemented_func(*args, **kwargs)
 

@@ -56,6 +56,13 @@ Set your OpenAI API key via the `OPENAI_API_KEY` environment variable. The model
 def fib(n: int) -> int: ...
 ```
 
+The reasoning effort defaults to `none` (compatible with the default model) and can be overridden with the `JIT_IMPLEMENTATION_REASONING_EFFORT` environment variable or the `reasoning_effort=` parameter. Choose an effort supported by your model (e.g. `minimal` for `gpt-5`), or pass an empty string to omit the parameter:
+
+```python
+@implement(model="gpt-5", reasoning_effort="minimal")
+def fib(n: int) -> int: ...
+```
+
 ### Advanced Usage
 
 ```python
