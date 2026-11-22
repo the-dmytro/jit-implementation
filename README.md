@@ -37,6 +37,8 @@ JIT Implementation is a groundbreaking Python library that generates your functi
 
 ### Installation
 
+Requires Python 3.12 or newer.
+
 ```bash
 pip install jit-implementation
 ```
@@ -49,7 +51,7 @@ pip install "jit-implementation[examples]"
 
 ### Configuration
 
-Set your OpenAI API key via the `OPENAI_API_KEY` environment variable. The model defaults to `gpt-6-sol` and can be overridden with the `JIT_IMPLEMENTATION_MODEL` environment variable or the `model=` parameter of `@implement`:
+Set your OpenAI API key via the `OPENAI_API_KEY` environment variable (or assign `Coder.API_KEY` in code). The model defaults to `gpt-6-sol` and can be overridden with the `JIT_IMPLEMENTATION_MODEL` environment variable or the `model=` parameter of `@implement`:
 
 ```python
 @implement(model="gpt-6-luna")
@@ -63,10 +65,22 @@ The reasoning effort defaults to `none` (compatible with the default model) and 
 def fib(n: int) -> int: ...
 ```
 
+### Decorator Options
+
+`@implement` can be used bare or with keyword arguments:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `test_functions` | `None` | List of callables that take the implementation and return `(passed: bool, description: str)`. |
+| `autonomous` | `True` | When `False`, asks for confirmation before each new iteration. |
+| `in_place` | `False` | Rewrite the declaration in your source file with the generated code. |
+| `max_tries` | `5` | Maximum generation attempts before raising `NotImplementedError`. |
+| `model` | `None` | OpenAI model; overrides `JIT_IMPLEMENTATION_MODEL`. |
+| `reasoning_effort` | `None` | Reasoning effort; overrides `JIT_IMPLEMENTATION_REASONING_EFFORT`. |
+
 ### Advanced Usage
 
 ```python
-from typing import List
 from jit_implementation import implement
 
 
@@ -75,7 +89,7 @@ from jit_implementation import implement
         lambda f: (f(100) == [2, 2, 5, 5], "Prime factors of 100"),
     ]
 )
-def prime_factors(n: int) -> List[int]:
+def prime_factors(n: int) -> list[int]:
     """Return the prime factors of n"""
 
 
@@ -103,7 +117,29 @@ def fib(n: int) -> int:
 1. **Define**: Provide a function or class signature with a docstring.
 2. **Generate**: JIT Implementation uses an LLM to create the implementation.
 3. **Validate**: Tests are run (if provided) and iterations are made if necessary.
-4. **Cache**: Generated code is stored for future use.
+4. **Cache**: Generated code is stored in the `.jit_impl/` directory, mirroring your project layout. It is reused until the declaration or its tests change (tracked via a SHA-256 checksum).
+
+Generated code is formatted with Ruff before it is saved.
+
+### Examples
+
+Runnable examples live in the [`examples/`](examples) directory:
+
+-   `fib.py` – Fibonacci numbers
+-   `primes.py` – prime factorization validated by tests
+-   `sliding_window.py` – sliding windows over a list
+-   `snake.py` – a complete Snake game (requires the `examples` extra)
+
+### Development
+
+```bash
+poetry install --with dev
+poetry run ruff check .
+poetry run ruff format --check .
+poetry run pytest
+```
+
+CI runs linting, format checks and tests on Python 3.12–3.15.
 
 ### Warning
 
@@ -121,7 +157,7 @@ This project is for educational and experimental purposes. Do not rely on it for
 
 If you find JIT Implementation helpful or amusing, consider buying me a coffee!
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/jiriklimes)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/the_dmytro)
 
 ---
 
