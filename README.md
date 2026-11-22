@@ -9,9 +9,11 @@ Tired of writing code? Let your programs write themselves with JIT Implementatio
 ```python
 from jit_implementation import implement
 
+
 @implement
 class Snake:
     """Snake game in pygame. Initializing launches the game."""
+
 
 if __name__ == "__main__":
     Snake()
@@ -39,11 +41,34 @@ JIT Implementation is a groundbreaking Python library that generates your functi
 pip install jit-implementation
 ```
 
+To run the `snake.py` example, also install the optional pygame dependency:
+
+```bash
+pip install "jit-implementation[examples]"
+```
+
+### Configuration
+
+Set your OpenAI API key via the `OPENAI_API_KEY` environment variable. The model defaults to `gpt-6-sol` and can be overridden with the `JIT_IMPLEMENTATION_MODEL` environment variable or the `model=` parameter of `@implement`:
+
+```python
+@implement(model="gpt-6-luna")
+def fib(n: int) -> int: ...
+```
+
+The reasoning effort defaults to `none` (compatible with the default model) and can be overridden with the `JIT_IMPLEMENTATION_REASONING_EFFORT` environment variable or the `reasoning_effort=` parameter. Choose an effort supported by your model (e.g. `minimal` for `gpt-5`), or pass an empty string to omit the parameter:
+
+```python
+@implement(model="gpt-5", reasoning_effort="minimal")
+def fib(n: int) -> int: ...
+```
+
 ### Advanced Usage
 
 ```python
 from typing import List
 from jit_implementation import implement
+
 
 @implement(
     test_functions=[
@@ -52,6 +77,7 @@ from jit_implementation import implement
 )
 def prime_factors(n: int) -> List[int]:
     """Return the prime factors of n"""
+
 
 assert prime_factors(100) == [2, 2, 5, 5]
 assert prime_factors(69420) == [2, 2, 3, 5, 13, 89]
@@ -65,6 +91,7 @@ For the brave souls who trust AI completely, JIT Implementation offers an `in_pl
 @implement(in_place=True)
 def fib(n: int) -> int:
     """Return the nth Fibonacci number"""
+
 
 # After running the code, your source file will be updated with the implementation!
 ```
