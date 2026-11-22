@@ -5,6 +5,10 @@ import pytest
 from jit_implementation.coder import REVISION_TEMPLATE, Coder
 
 
+class Widget:
+    pass
+
+
 def target(n: int) -> int:
     """Return n doubled."""
 
@@ -97,3 +101,11 @@ def test_revision_template_renders_checksum():
 def test_format_code_normalizes_source():
     formatted = make_coder()._format_code("def target(n):\n    return  n*2\n")
     assert formatted == "def target(n):\n    return n * 2\n"
+
+
+def test_types_enum_preserves_type_names():
+    types = {Widget}
+    enum_cls = Coder._types_enum(types)
+    member = enum_cls("Widget")
+    assert member.value == "Widget"
+    assert {t.__name__: t for t in types}[member] is Widget

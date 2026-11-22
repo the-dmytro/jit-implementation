@@ -185,6 +185,10 @@ class Coder:
 
         return existing_hash and existing_hash.group(1) == implementation_checksum
 
+    @staticmethod
+    def _types_enum(types: set[type]) -> type[StrEnum]:
+        return StrEnum("types", {t.__name__: t.__name__ for t in types})
+
     def run(self):
         implementation_checksum = self._get_implementation_checksum()
 
@@ -232,7 +236,7 @@ class Coder:
             current_tools = tools.copy()
 
             if self.ide.unread_types:
-                _types = StrEnum("types", [t.__name__ for t in self.ide.unread_types])
+                _types = self._types_enum(self.ide.unread_types)
 
                 class ReadSourceCode(BaseModel):
                     type: _types  # type: ignore
